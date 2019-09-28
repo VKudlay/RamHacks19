@@ -1,2 +1,2 @@
 # RamHacks19
-Out project stuffs
+Our project stuffs
