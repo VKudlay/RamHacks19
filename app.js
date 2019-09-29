@@ -1,50 +1,85 @@
-var createError = require('http-errors');
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
-var sassMiddleware = require('node-sass-middleware');
+if (process.env.NODE_END != "production") {
+    require("dotenv").config()
+}
 
-var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
-var loginRouter = require('./routes/login');
+const express       = require("express");
+// const bodyParser    = require("body-parser");
+const app           = express();
+const path          = require("path");
+const db            = require("./db");
+const collection    = "todo";
+const bctypt        = require("bcrypt")
+const passport      = require("passport")
+const flash         = require("express-flash")
+const session       = require("express-session")
 
-var app = express();
+let multer = require('multer');
+let upload = multer();
 
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'ejs');
+const initializePassport = require("./passport-config")
+initializePassport(
+    passport,
+    email => users.find(user => user.email === email)
+)
 
-app.use(logger('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(sassMiddleware({
-  src: path.join(__dirname, 'public'),
-  dest: path.join(__dirname, 'public'),
-  indentedSyntax: true, // true = .sass and false = .scss
-  sourceMap: true
-}));
-app.use(express.static(path.join(__dirname, 'public')));
+const users = []
 
-app.use('/', indexRouter);
-app.use('/users', usersRouter);
-app.use('/login', loginRouter);
+app.set("view-engine", "ejs")
+// app.use(bodyParser.json())
+app.use(express.static(__dirname + '/views'));
+app.use(flash())
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false
+}))
+app.use(passport.initialize())
+app.use(passport.session())
 
-// catch 404 and forward to error handler
-app.use(function(req, res, next) {
-  next(createError(404));
+app.get("/", (req, res) => {
+    res.render("index.ejs");
+});
+app.get("/register-admin", (req, res) => {
+    res.render("register-admin.html");
+})
+
+// Database Retrieve Route
+app.get("/getTodos", (req, res) => {
+    db.getDB().collection(collection).find({}).toArray((err, documents) => {
+        if (err) console.log(err);
+        else {
+            console.log(documents);
+            res.json(documents);
+        }
+    });
 });
 
-// error handler
-app.use(function(err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
 
-  // render the error page
-  res.status(err.status || 500);
-  res.render('error');
+app.post("/register-admin", async (req, res) => {
+    try {
+        const hashedPassword = bcrypt.hash(req.body.password, 10)
+        users.push({
+            id:         Date.now().toString(),
+            name:       req.body.name,
+            email:      req.body.email,
+            password:   req.body.password
+
+        })
+        res.redirect("/index.ejs")
+    } catch {
+        res.redirect("/register-admin.html")
+    }
+    req.body.email
 });
 
-module.exports = app;
+db.connect((err) => {
+    if(err) {
+        console.log("Unable to connect to database");
+        process.exit(1);
+    }
+    else {
+        app.listen(3000, () => {
+            console.log("connecting to database, app listening on port 3000");
+        });
+    }
+})
